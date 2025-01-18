@@ -1,17 +1,25 @@
 {
+    "server": "116.203.117.243",
     "inbounds": [
         {
-            "port": 10086,
+            "port": 30249,
             "protocol": "vmess",
             "settings": {
-                "clients": []
+                "clients": [
+                    {
+                        "id": "63ce44b7-f81d-4a32-9f90-f76d97040aba",
+                        "email": "user@example.com"
+                    }
+                ]
             }
         }
     ],
     "outbounds": [
         {
             "protocol": "freedom",
-            "settings": {}
+            "settings": {
+                "vnext": null
+            }
         }
     ]
-} 
+}

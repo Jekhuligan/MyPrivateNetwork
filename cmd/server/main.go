@@ -4,8 +4,6 @@ import (
     "encoding/json"
     "log"
     "net/http"
-    "os"
-    "path/filepath"
 
     "myprivatenetwork/internal/xray"
 )
@@ -13,41 +11,30 @@ import (
 var service *xray.Service
 
 func main() {
-    // Определяем путь к конфигурационному файлу
-    configPath := getConfigPath()
-
-    // Инициализируем сервис
     var err error
-    service, err = xray.NewService(configPath)
+    service, err = xray.NewService("config.json")
     if err != nil {
         log.Fatalf("Failed to initialize service: %v", err)
     }
 
-    // Настраиваем маршруты
     http.HandleFunc("/api/clients", handleClients)
     http.HandleFunc("/api/clients/create", handleCreateClient)
 
-    // Запускаем сервер
     log.Printf("Starting server on :8080")
     if err := http.ListenAndServe(":8080", nil); err != nil {
         log.Fatalf("Server failed: %v", err)
     }
 }
 
-func getConfigPath() string {
-    // Сначала проверяем переменную окружения
-    if path := os.Getenv("XRAY_CONFIG_PATH"); path != "" {
-        return path
-    }
-    // Иначе используем путь по умолчанию
-    return "config.json"
-}
-
 func handleClients(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case http.MethodGet:
-        clients := service.GetClients()
-        json.NewEncoder(w).Encode(clients)
+        if len(service.GetConfig().Inbounds) > 0 {
+            clients := service.GetConfig().Inbounds[0].Settings.Clients
+            json.NewEncoder(w).Encode(clients)
+        } else {
+            json.NewEncoder(w).Encode([]xray.Client{})
+        }
     default:
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }

@@ -1,39 +1,71 @@
 package xray
 
 import (
+    "encoding/json"
     "fmt"
+    "os"
     "os/exec"
-    "github.com/google/uuid"
 )
 
 type Service struct {
     configPath string
     config     *XrayConfig
+    serverAddr string
+    serverPort int
 }
 
-func NewService(configPath string) *Service {
-    return &Service{
+func NewService(configPath string) (*Service, error) {
+    service := &Service{
         configPath: configPath,
         config:     &XrayConfig{},
-    }
-}
-
-func (s *Service) generateUUID() string {
-    return uuid.New().String()
-}
-
-func (s *Service) saveConfig() error {
-    return s.config.SaveToFile(s.configPath)
-}
-
-func (s *Service) AddClient(email string) (*Client, error) {
-    client := &Client{
-        ID:      s.generateUUID(),
-        Email:   email,
-        Level:   1,
-        AlterId: 0,
+        serverAddr: "116.203.117.243", // Ваш адрес сервера
+        serverPort: 30249,             // Ваш порт
     }
     
+    // Загружаем существующую конфигурацию
+    if err := service.loadConfig(); err != nil {
+        return nil, fmt.Errorf("failed to load config: %w", err)
+    }
+    
+    return service, nil
+}
+
+// loadConfig загружает конфигурацию из файла
+func (s *Service) loadConfig() error {
+    data, err := os.ReadFile(s.configPath)
+    if err != nil {
+        return fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    if err := json.Unmarshal(data, &s.config); err != nil {
+        return fmt.Errorf("failed to parse config: %w", err)
+    }
+
+    return nil
+}
+
+// saveConfig сохраняет конфигурацию в файл
+func (s *Service) saveConfig() error {
+    data, err := json.MarshalIndent(s.config, "", "    ")
+    if err != nil {
+        return fmt.Errorf("failed to marshal config: %w", err)
+    }
+
+    if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+        return fmt.Errorf("failed to write config file: %w", err)
+    }
+
+    return nil
+}
+
+// CreateClient создает нового клиента и добавляет его в конфигурацию
+func (s *Service) CreateClient(config ClientConfig) (*Client, string, error) {
+    // Создаем нового клиента
+    client, err := NewClient(config)
+    if err != nil {
+        return nil, "", fmt.Errorf("failed to create client: %w", err)
+    }
+
     // Добавляем клиента в конфигурацию
     if len(s.config.Inbounds) > 0 {
         s.config.Inbounds[0].Settings.Clients = append(
@@ -41,72 +73,32 @@ func (s *Service) AddClient(email string) (*Client, error) {
             *client,
         )
     }
-    
+
     // Сохраняем конфигурацию
     if err := s.saveConfig(); err != nil {
-        return nil, err
+        return nil, "", fmt.Errorf("failed to save config: %w", err)
     }
-    
+
     // Перезапускаем Xray
     if err := s.restart(); err != nil {
-        return nil, err
+        return nil, "", fmt.Errorf("failed to restart xray: %w", err)
     }
-    
-    return client, nil
+
+    // Генерируем ссылку для подключения
+    link, err := GenerateClientLink(client, s.serverAddr, s.serverPort)
+    if err != nil {
+        return nil, "", fmt.Errorf("failed to generate client link: %w", err)
+    }
+
+    return client, link, nil
 }
 
-func (s *Service) RemoveClient(email string) error {
-    if len(s.config.Inbounds) == 0 {
-        return fmt.Errorf("no inbounds configured")
-    }
-    
-    clients := s.config.Inbounds[0].Settings.Clients
-    for i, client := range clients {
-        if client.Email == email {
-            // Удаляем клиента
-            s.config.Inbounds[0].Settings.Clients = append(
-                clients[:i],
-                clients[i+1:]...,
-            )
-            
-            // Сохраняем конфигурацию
-            if err := s.saveConfig(); err != nil {
-                return err
-            }
-            
-            // Перезапускаем Xray
-            return s.restart()
-        }
-    }
-    
-    return fmt.Errorf("client not found")
+// GetConfig возвращает текущую конфигурацию
+func (s *Service) GetConfig() *XrayConfig {
+    return s.config
 }
 
 func (s *Service) restart() error {
     cmd := exec.Command("systemctl", "restart", "xray")
     return cmd.Run()
-}
-
-// CreateClient создает нового клиента и добавляет его в конфигурацию
-func (s *Service) CreateClient(config ClientConfig) (*Client, string, error) {
-    client := &Client{
-        ID:    s.generateUUID(),
-        Email: config.Email,
-        // ... другие поля
-    }
-    
-    // ... логика создания клиента
-    
-    if err := s.saveConfig(); err != nil {
-        return nil, "", err
-    }
-    
-    return client, s.generateLink(client), nil
-}
-
-func (s *Service) generateLink(client *Client) string {
-    // Используйте правильное поле из конфига
-    serverAddr := s.config.Address // или как у вас называется поле адреса сервера
-    // ... генерация ссылки
-    return ""
 } 

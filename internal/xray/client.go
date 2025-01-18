@@ -1,7 +1,6 @@
 package xray
 
 import (
-    "crypto/rand"
     "encoding/base64"
     "encoding/json"
     "fmt"
