@@ -1,5 +1,17 @@
 # MyPrivateNetwork
-My Private Network
-New Project
-New Commit for chack git integration
-Second Commit
+
+Система управления Xray VPN сервером
+
+## Возможности
+- Создание и управление пользователями Xray
+- Автоматическая настройка конфигурации сервера
+- Мониторинг подключений
+- REST API для управления пользователями
+
+## Технологии
+- Golang
+- Xray-core
+- SQLite/PostgreSQL
+- Docker
+
+## Структура проекта
