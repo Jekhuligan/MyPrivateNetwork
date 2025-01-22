@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"time"
 
 	"myprivatenetwork/internal/xray"
 
@@ -44,7 +45,8 @@ func main() {
 				msg.Text = "Привет! Я бот для управления VPN.\n" +
 					"Доступные команды:\n" +
 					"/create - создать подключение\n" +
-					"/qr - показать QR код для подключения"
+					"/qr - показать QR код для подключения\n" +
+					"/info - информация о подключении"
 
 			case "create":
 				// Используем ID чата как идентификатор пользователя
@@ -94,6 +96,48 @@ func main() {
 				photo.Caption = fmt.Sprintf("Ваш QR код для подключения\nКонфигурация: %s", link)
 				bot.Send(photo)
 				continue
+
+			case "info":
+				userID := fmt.Sprintf("tg_%d", update.Message.Chat.ID)
+				info, err := xrayManager.GetClientInfo(userID)
+				if err != nil {
+					msg.Text = fmt.Sprintf("Ошибка при получении информации: %v", err)
+					break
+				}
+
+				// Форматируем размеры в удобочитаемый вид
+				formatBytes := func(bytes int64) string {
+					const unit = 1024
+					if bytes < unit {
+						return fmt.Sprintf("%d B", bytes)
+					}
+					div, exp := int64(unit), 0
+					for n := bytes / unit; n >= unit; n /= unit {
+						div *= unit
+						exp++
+					}
+					return fmt.Sprintf("%.1f %cB",
+						float64(bytes)/float64(div), "KMGTPE"[exp])
+				}
+
+				// Форматируем оставшееся время
+				timeLeft := info.ExpiryTime.Sub(time.Now())
+				daysLeft := int(timeLeft.Hours() / 24)
+
+				msg.Text = fmt.Sprintf("Информация о подключении:\n\n"+
+					"📊 Трафик:\n"+
+					"↑ Отправлено: %s\n"+
+					"↓ Получено: %s\n"+
+					"💾 Общий лимит: %s\n\n"+
+					"⏱ Активировано: %s\n"+
+					"⌛️ Осталось дней: %d\n"+
+					"📅 Действует до: %s",
+					formatBytes(info.Up),
+					formatBytes(info.Down),
+					formatBytes(info.Total),
+					info.CreatedAt.Format("02.01.2006 15:04"),
+					daysLeft,
+					info.ExpiryTime.Format("02.01.2006 15:04"))
 
 			default:
 				msg.Text = "Неизвестная команда"

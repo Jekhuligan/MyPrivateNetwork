@@ -19,6 +19,22 @@ type XrayManager struct {
 	password  string
 }
 
+// Добавляем структуру для информации о клиенте
+type ClientInfo struct {
+	ID         string
+	Email      string
+	ExpiryTime time.Time
+	Enable     bool
+	Port       int
+	Up         int64
+	Down       int64
+	Total      int64
+	LimitIP    int
+	TotalGB    int64
+	Flow       string
+	CreatedAt  time.Time
+}
+
 func NewXrayManager(serverURL, username, password string) (*XrayManager, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -308,4 +324,95 @@ func generateVmessLink(clientID, email string, port int) string {
 	}
 
 	return "vmess://" + base64.StdEncoding.EncodeToString(configJSON)
+}
+
+// Обновляем метод GetClientInfo
+func (m *XrayManager) GetClientInfo(email string) (*ClientInfo, error) {
+	// Получаем список inbounds
+	listReq, err := http.NewRequest("GET", m.serverURL+"/panel/api/inbounds/list", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create list request: %v", err)
+	}
+
+	listReq.Header.Set("Content-Type", "application/json")
+	listReq.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	listResp, err := m.client.Do(listReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get inbounds list: %v", err)
+	}
+	defer listResp.Body.Close()
+
+	var inboundResp struct {
+		Success bool      `json:"success"`
+		Obj     []Inbound `json:"obj"`
+	}
+
+	if err := json.NewDecoder(listResp.Body).Decode(&inboundResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	// Ищем клиента во всех inbounds
+	for _, inbound := range inboundResp.Obj {
+		var settings VlessSettings
+		if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
+			continue
+		}
+
+		for _, client := range settings.Clients {
+			if client.Email == email {
+				// Получаем статистику клиента
+				statsReq, err := http.NewRequest("GET",
+					fmt.Sprintf("%s/panel/api/inbounds/getClientTraffics/%s", m.serverURL, client.Email),
+					nil)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create stats request: %v", err)
+				}
+
+				statsReq.Header.Set("Content-Type", "application/json")
+				statsReq.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+				statsResp, err := m.client.Do(statsReq)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get client stats: %v", err)
+				}
+				defer statsResp.Body.Close()
+
+				var statsData struct {
+					Success bool `json:"success"`
+					Obj     struct {
+						Up   int64 `json:"up"`
+						Down int64 `json:"down"`
+					} `json:"obj"`
+				}
+
+				if err := json.NewDecoder(statsResp.Body).Decode(&statsData); err != nil {
+					return nil, fmt.Errorf("failed to decode stats response: %v", err)
+				}
+
+				// Преобразуем время из миллисекунд в time.Time
+				expiryTime := time.UnixMilli(client.ExpiryTime)
+				if client.ExpiryTime == 0 {
+					expiryTime = time.Now().AddDate(100, 0, 0) // 100 лет
+				}
+
+				return &ClientInfo{
+					ID:         client.ID,
+					Email:      client.Email,
+					ExpiryTime: expiryTime,
+					Enable:     client.Enable,
+					Port:       inbound.Port,
+					Up:         statsData.Obj.Up,
+					Down:       statsData.Obj.Down,
+					Total:      int64(client.TotalGB) * 1024 * 1024 * 1024,
+					LimitIP:    client.LimitIP,
+					TotalGB:    int64(client.TotalGB),
+					Flow:       client.Flow,
+					CreatedAt:  time.Now(),
+				}, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("client with email %s not found", email)
 }
