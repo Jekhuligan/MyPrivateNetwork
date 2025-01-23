@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"time"
 
 	"myprivatenetwork/internal/xray"
+
+	"encoding/base64"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -80,10 +83,17 @@ func main() {
 					break
 				}
 
-				// Получаем ссылку для клиента
-				link, err := xrayManager.CreateClient(userID)
+				// Получаем информацию о существующем клиенте
+				clientInfo, err := xrayManager.GetClientInfo(userID)
 				if err != nil {
-					msg.Text = fmt.Sprintf("Ошибка при получении данных подключения: %v", err)
+					msg.Text = "У вас нет активного подключения. Используйте /create для создания нового подключения"
+					break
+				}
+
+				// Генерируем ссылку для существующего клиента
+				link := generateVmessLink(clientInfo.ID, userID, clientInfo.Port)
+				if link == "" {
+					msg.Text = "Ошибка при генерации ссылки подключения"
 					break
 				}
 
@@ -121,7 +131,7 @@ func main() {
 				}
 
 				// Форматируем оставшееся время
-				timeLeft := info.ExpiryTime.Sub(time.Now())
+				timeLeft := time.Until(info.ExpiryTime)
 				daysLeft := int(timeLeft.Hours() / 24)
 
 				msg.Text = fmt.Sprintf("Информация о подключении:\n\n"+
@@ -129,13 +139,11 @@ func main() {
 					"↑ Отправлено: %s\n"+
 					"↓ Получено: %s\n"+
 					"💾 Общий лимит: %s\n\n"+
-					"⏱ Активировано: %s\n"+
 					"⌛️ Осталось дней: %d\n"+
 					"📅 Действует до: %s",
 					formatBytes(info.Up),
 					formatBytes(info.Down),
 					formatBytes(info.Total),
-					info.CreatedAt.Format("02.01.2006 15:04"),
 					daysLeft,
 					info.ExpiryTime.Format("02.01.2006 15:04"))
 
@@ -148,4 +156,28 @@ func main() {
 			}
 		}
 	}
+}
+
+func generateVmessLink(clientID, email string, port int) string {
+	config := xray.VmessConfig{
+		Version: "2",
+		Name:    email,
+		Address: "116.203.117.243",
+		Port:    port,
+		ID:      clientID,
+		Aid:     0,
+		Net:     "tcp",
+		Type:    "none",
+		Host:    "",
+		Path:    "",
+		TLS:     "none",
+		SNI:     "",
+	}
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return ""
+	}
+
+	return "vmess://" + base64.StdEncoding.EncodeToString(configJSON)
 }

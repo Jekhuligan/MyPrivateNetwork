@@ -67,7 +67,6 @@ type VlessClient struct {
 	Reset      int    `json:"reset"`
 	Up         int64  `json:"up"`
 	Down       int64  `json:"down"`
-	CreatedAt  int64  `json:"createdAt"`
 }
 
 type VmessConfig struct {

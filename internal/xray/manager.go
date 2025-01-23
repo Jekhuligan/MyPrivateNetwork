@@ -32,7 +32,6 @@ type ClientInfo struct {
 	LimitIP    int
 	TotalGB    int64
 	Flow       string
-	CreatedAt  time.Time
 }
 
 func NewXrayManager(serverURL, username, password string) (*XrayManager, error) {
@@ -158,6 +157,11 @@ func (m *XrayManager) DeleteClientsByEmail(email string) error {
 }
 
 func (m *XrayManager) ClientExists(email string) (bool, error) {
+	// Проверяем логин перед выполнением операции
+	if err := m.checkAndRelogin(); err != nil {
+		return false, fmt.Errorf("failed to check login status: %v", err)
+	}
+
 	listReq, err := http.NewRequest("GET", m.serverURL+"/panel/api/inbounds/list", nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create list request: %v", err)
@@ -194,6 +198,11 @@ func (m *XrayManager) ClientExists(email string) (bool, error) {
 }
 
 func (m *XrayManager) CreateClient(email string) (string, error) {
+	// Проверяем логин перед выполнением операции
+	if err := m.checkAndRelogin(); err != nil {
+		return "", fmt.Errorf("failed to check login status: %v", err)
+	}
+
 	// Проверяем существование клиента
 	exists, err := m.ClientExists(email)
 	if err != nil {
@@ -328,6 +337,11 @@ func generateVmessLink(clientID, email string, port int) string {
 
 // Обновляем метод GetClientInfo
 func (m *XrayManager) GetClientInfo(email string) (*ClientInfo, error) {
+	// Проверяем логин перед выполнением операции
+	if err := m.checkAndRelogin(); err != nil {
+		return nil, fmt.Errorf("failed to check login status: %v", err)
+	}
+
 	// Получаем список inbounds
 	listReq, err := http.NewRequest("GET", m.serverURL+"/panel/api/inbounds/list", nil)
 	if err != nil {
@@ -408,11 +422,32 @@ func (m *XrayManager) GetClientInfo(email string) (*ClientInfo, error) {
 					LimitIP:    client.LimitIP,
 					TotalGB:    int64(client.TotalGB),
 					Flow:       client.Flow,
-					CreatedAt:  time.Now(),
 				}, nil
 			}
 		}
 	}
 
 	return nil, fmt.Errorf("client with email %s not found", email)
+}
+
+// Добавляем метод для проверки и обновления логина
+func (m *XrayManager) checkAndRelogin() error {
+	// Пробуем сделать тестовый запрос
+	listReq, err := http.NewRequest("GET", m.serverURL+"/panel/api/inbounds/list", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create test request: %v", err)
+	}
+
+	listReq.Header.Set("Content-Type", "application/json")
+	listReq.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	resp, err := m.client.Do(listReq)
+	if err != nil || resp.StatusCode == http.StatusUnauthorized {
+		// Если получили ошибку авторизации, пробуем залогиниться заново
+		if err := m.login(); err != nil {
+			return fmt.Errorf("failed to relogin: %v", err)
+		}
+	}
+
+	return nil
 }
