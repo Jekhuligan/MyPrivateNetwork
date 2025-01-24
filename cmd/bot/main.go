@@ -1,15 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"time"
 
 	"myprivatenetwork/internal/xray"
-
-	"encoding/base64"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -91,7 +88,7 @@ func main() {
 				}
 
 				// Генерируем ссылку для существующего клиента
-				link := generateVmessLink(clientInfo.ID, userID, clientInfo.Port)
+				link := xrayManager.GenerateVmessLink(clientInfo.ID, userID, clientInfo.Port)
 				if link == "" {
 					msg.Text = "Ошибка при генерации ссылки подключения"
 					break
@@ -156,28 +153,4 @@ func main() {
 			}
 		}
 	}
-}
-
-func generateVmessLink(clientID, email string, port int) string {
-	config := xray.VmessConfig{
-		Version: "2",
-		Name:    email,
-		Address: "116.203.117.243",
-		Port:    port,
-		ID:      clientID,
-		Aid:     0,
-		Net:     "tcp",
-		Type:    "none",
-		Host:    "",
-		Path:    "",
-		TLS:     "none",
-		SNI:     "",
-	}
-
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		return ""
-	}
-
-	return "vmess://" + base64.StdEncoding.EncodeToString(configJSON)
 }

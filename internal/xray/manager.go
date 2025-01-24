@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"time"
@@ -450,4 +451,30 @@ func (m *XrayManager) checkAndRelogin() error {
 	}
 
 	return nil
+}
+
+// Обновляем метод, добавляя userID
+func (m *XrayManager) GenerateVmessLink(uuid string, userID string, port int) string {
+	config := map[string]interface{}{
+		"v":    "2",
+		"ps":   fmt.Sprintf("Proxy-%s", userID), // Используем строковый userID
+		"add":  m.serverURL,
+		"port": port,
+		"id":   uuid,
+		"aid":  "0",
+		"net":  "ws",
+		"type": "none",
+		"host": m.serverURL,
+		"path": "/",
+		"tls":  "tls",
+	}
+
+	jsonBytes, err := json.Marshal(config)
+	if err != nil {
+		log.Printf("Error marshaling config: %v", err)
+		return ""
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(jsonBytes)
+	return "vmess://" + encoded
 }
