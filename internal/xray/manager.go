@@ -240,25 +240,24 @@ func (m *XrayManager) CreateClient(email string) (string, error) {
 	// Ищем нужный inbound
 	var targetInbound *Inbound
 	for i := range inboundResp.Obj {
-		if inboundResp.Obj[i].ID == 3 {
+		if inboundResp.Obj[i].ID == 5 {
 			targetInbound = &inboundResp.Obj[i]
 			break
 		}
 	}
 
 	if targetInbound == nil {
-		return "", fmt.Errorf("inbound with ID=3 not found")
+		return "", fmt.Errorf("inbound with ID=5 not found")
 	}
 
-	// Создаем нового клиента
-	expiryTime := time.Now().AddDate(0, 1, 0).UnixMilli()
+	// Создаем нового VLESS клиента с указанным Flow
 	newClient := VlessClient{
 		ID:         generateUUID(),
 		Flow:       "xtls-rprx-vision",
 		Email:      email,
 		LimitIP:    0,
 		TotalGB:    0,
-		ExpiryTime: expiryTime,
+		ExpiryTime: time.Now().AddDate(0, 1, 0).UnixMilli(), // 1 месяц
 		Enable:     true,
 	}
 
@@ -297,9 +296,16 @@ func (m *XrayManager) CreateClient(email string) (string, error) {
 	}
 	defer updateResp.Body.Close()
 
-	// Генерируем ссылку для подключения
-	link := generateVmessLink(newClient.ID, email, targetInbound.Port)
-	return link, nil
+	// Генерируем VLESS ссылку
+	return generateVlessLink(newClient.ID, email, targetInbound.Port), nil
+}
+
+func generateVlessLink(uuid, email string, port int) string {
+	return fmt.Sprintf("vless://%s@116.203.117.243:%d?encryption=none&security=reality&type=tcp&flow=xtls-rprx-vision&fp=chrome&pbk=f0qNGUsDR9bMDCRjtmRPGsjdReXe1t-QEHTgqnMQAUc&sid=0708451e&sni=yahoo.com&headerType=none#%s",
+		uuid,
+		port,
+		email,
+	)
 }
 
 // Вспомогательные функции
@@ -310,30 +316,6 @@ func generateUUID() string {
 	uuid[8] = (uuid[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x",
 		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:])
-}
-
-func generateVmessLink(clientID, email string, port int) string {
-	config := VmessConfig{
-		Version: "2",
-		Name:    email,
-		Address: "116.203.117.243",
-		Port:    port,
-		ID:      clientID,
-		Aid:     0,
-		Net:     "tcp",
-		Type:    "none",
-		Host:    "",
-		Path:    "",
-		TLS:     "none",
-		SNI:     "",
-	}
-
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		return ""
-	}
-
-	return "vmess://" + base64.StdEncoding.EncodeToString(configJSON)
 }
 
 // Обновляем метод GetClientInfo
