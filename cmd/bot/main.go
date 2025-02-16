@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"time"
 
-	"myprivatenetwork/internal/xray"
+	"myprivatenetwork/cmd/xray"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
